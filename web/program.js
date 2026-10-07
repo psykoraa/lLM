@@ -97,7 +97,7 @@
     var useBtn = button(pasteBox.lastChild, 'Použít tento text', 'primary');
     var fileIn = document.createElement('input');
     fileIn.type = 'file';
-    fileIn.accept = '.txt,.md,.csv,.tsv,.html,.json,text/*';
+    fileIn.accept = '.txt,.md,.csv,.tsv,.html,.json,.pdf,text/*,application/pdf';
     fileIn.hidden = true;
     bar.appendChild(fileIn);
 
@@ -113,6 +113,21 @@
     fileIn.addEventListener('change', function(){
       var f = fileIn.files[0];
       if(!f) return;
+      if(/\.pdf$/i.test(f.name) || f.type === 'application/pdf'){
+        say('Čte se text z PDF…');
+        var x = new XMLHttpRequest();
+        x.open('POST', '/api/pdf', true);
+        x.setRequestHeader('X-Token', TOKEN);
+        x.onload = function(){
+          var d = null; try{ d = JSON.parse(x.responseText); }catch(e){}
+          if(d && d.text){ area.value = d.text; pasteBox.hidden = true; use(d.text, f.name); }
+          else say((d && d.error) || 'PDF se nepodařilo přečíst.');
+        };
+        x.onerror = function(){ say('PDF se nepodařilo přečíst.'); };
+        x.send(f);
+        fileIn.value = '';
+        return;
+      }
       var r = new FileReader();
       r.onload = function(){ area.value = r.result; pasteBox.hidden = true; use(r.result, f.name); };
       r.onerror = function(){ say('Soubor se nepodařilo přečíst.'); };
