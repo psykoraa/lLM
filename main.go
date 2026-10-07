@@ -21,14 +21,23 @@ Volby:
 `
 
 func main() {
-	if len(os.Args) < 2 || os.Args[1] != "train" {
+	args := os.Args[1:]
+	switch {
+	case len(args) == 0:
+		// dvojklik na program: interaktivní režim
+		os.Exit(runInteractive(""))
+	case args[0] == "train":
+		if err := runTrain(args[1:]); err != nil {
+			fmt.Fprintln(os.Stderr, "Chyba:", err)
+			os.Exit(1)
+		}
+	case len(args) == 1 && !strings.HasPrefix(args[0], "-") && args[0] != "help":
+		// soubor přetažený myší na program: interaktivní režim s tímto souborem
+		os.Exit(runInteractive(args[0]))
+	default:
 		fmt.Fprint(os.Stderr, usage)
 		trainFlags().PrintDefaults()
 		os.Exit(2)
-	}
-	if err := runTrain(os.Args[2:]); err != nil {
-		fmt.Fprintln(os.Stderr, "Chyba:", err)
-		os.Exit(1)
 	}
 }
 
@@ -64,12 +73,16 @@ func runTrain(args []string) error {
 	if !ok {
 		return fmt.Errorf("neznámý algoritmus %q (použijte bpe, wordpiece nebo sentencepiece)", opts.algo)
 	}
-	if opts.size < 1 {
+	return doTrain(fs.Arg(0), alg, opts.size, opts.ignoreCase, opts.out, opts.merges)
+}
+
+// doTrain načte text, sestaví slovník a zapíše výsledné soubory (merges může být prázdné).
+func doTrain(path string, alg Algorithm, size int, ignoreCase bool, out, merges string) error {
+	if size < 1 {
 		return fmt.Errorf("velikost slovníku musí být kladné číslo")
 	}
-
 	var in io.Reader = os.Stdin
-	if path := fs.Arg(0); path != "-" {
+	if path != "-" {
 		f, err := os.Open(path)
 		if err != nil {
 			return err
@@ -79,7 +92,7 @@ func runTrain(args []string) error {
 	}
 
 	t0 := time.Now()
-	corpus, err := BuildCorpus(in, alg, opts.ignoreCase)
+	corpus, err := BuildCorpus(in, alg, ignoreCase)
 	if err != nil {
 		return err
 	}
@@ -89,7 +102,7 @@ func runTrain(args []string) error {
 	tRead := time.Since(t0)
 
 	t1 := time.Now()
-	res, err := Train(corpus, alg, opts.size)
+	res, err := Train(corpus, alg, size)
 	if err != nil {
 		if e, ok := err.(ErrTooSmall); ok {
 			return fmt.Errorf("slovník jednotlivých znaků má už %d symbolů, zadejte alespoň toto číslo", e.Chars)
@@ -98,11 +111,11 @@ func runTrain(args []string) error {
 	}
 	tTrain := time.Since(t1)
 
-	if err := writeVocab(opts.out, res); err != nil {
+	if err := writeVocab(out, res); err != nil {
 		return err
 	}
-	if opts.merges != "" {
-		if err := writeMerges(opts.merges, res, alg.usesRatio()); err != nil {
+	if merges != "" {
+		if err := writeMerges(merges, res, alg.usesRatio()); err != nil {
 			return err
 		}
 	}
@@ -115,10 +128,13 @@ func runTrain(args []string) error {
 	fmt.Fprintf(os.Stderr, "Korpus: %d %s (%d celkem)\n", len(corpus.Words), unit, corpus.Total)
 	fmt.Fprintf(os.Stderr, "Slovník: %d tokenů (%d jednotlivých znaků a %d sloučení)\n", len(res.Tokens), len(res.Initial), len(res.Merges))
 	if res.Exhausted {
-		fmt.Fprintf(os.Stderr, "Slovník nelze zvětšit na %d: všechny řady znaků jsou už jediným symbolem.\n", opts.size)
+		fmt.Fprintf(os.Stderr, "Slovník nelze zvětšit na %d: všechny řady znaků jsou už jediným symbolem.\n", size)
 	}
 	fmt.Fprintf(os.Stderr, "Čas: načtení %s, trénink %s\n", tRead.Round(time.Millisecond), tTrain.Round(time.Millisecond))
-	fmt.Fprintf(os.Stderr, "Zapsáno: %s\n", opts.out)
+	fmt.Fprintf(os.Stderr, "Zapsáno: %s\n", out)
+	if merges != "" {
+		fmt.Fprintf(os.Stderr, "Zapsáno: %s\n", merges)
+	}
 	return nil
 }
 

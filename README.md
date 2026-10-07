@@ -17,7 +17,15 @@ Hotové programy jsou ve složce [`bin/`](bin/) (nic se neinstaluje):
 | macOS (Intel) | `bin/llm-macos-intel` |
 | Linux | `bin/llm-linux-amd64` |
 
-Ve Windows otevřete příkazový řádek (nebo PowerShell) ve složce se souborem a spusťte:
+**Nejjednodušeji (Windows):**
+
+1. Stáhněte `llm-windows-amd64.exe` a ukázkový text `priklady/einstein.txt` do jedné složky.
+2. **Dvakrát klikněte na program** (otevře se černé okno), nebo na něj **myší přetáhněte textový soubor**.
+3. Program se zeptá na soubor, algoritmus (1 = BPE, 2 = WordPiece, 3 = SentencePiece), velikost slovníku
+   a rozlišování velkých a malých písmen. Potom výsledek zapíše vedle vašeho textu
+   (`…-slovnik.tsv` a `…-postup.tsv`). Okno se nezavře, dokud nestisknete Enter.
+
+**Z příkazového řádku:**
 
 ```
 llm-windows-amd64.exe train -algo bpe -size 5000 -o slovnik.tsv einstein.txt
