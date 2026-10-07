@@ -71,6 +71,7 @@
         <p id="brand-p">&nbsp;</p>
       </div>
     </div>
+    <button class="btn primary" id="btn-dl" type="button" hidden>Stáhnout slovník (.tsv)</button>
   </div>
 
   <ul class="token-grid" id="token-grid"></ul>
@@ -114,6 +115,20 @@
   });
   grid.appendChild(frag);
   document.getElementById('brand-p').textContent = typNazev + ', ' + data.tokens.length + ' tokenů';
+
+  // export: číslo tokenu, tabulátor, token (soubor .tsv, UTF-8 se značkou pro Excel)
+  var dl = document.getElementById('btn-dl');
+  dl.hidden = false;
+  dl.addEventListener('click', function(){
+    var text = '\uFEFF' + data.tokens.map(function(tk, i){ return (i + 1) + '\t' + tk; }).join('\n') + '\n';
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], {type: 'text/tab-separated-values;charset=utf-8'}));
+    a.download = 'slovnik-' + typ + '.tsv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(a.href); }, 1000);
+  });
 })();
 </script>
 

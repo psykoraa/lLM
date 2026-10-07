@@ -93,7 +93,7 @@ mark.hl-ab{ background:repeating-linear-gradient(135deg, #ffc400 0 4px, #4fc3ff 
 .vocab-controls{ display:flex; flex-wrap:wrap; gap:14px 18px; align-items:flex-end; margin-bottom:12px; }
 .vocab-controls .field{ flex:1 1 240px; max-width:360px; }
 .vocab-out{ margin-top:14px; }
-.vocab-open{ margin:4px 0 12px; }
+.vocab-open{ margin:4px 0 12px; display:flex; flex-wrap:wrap; gap:10px; }
 .big-text{
   display:block; width:100%; min-height:220px; resize:vertical;
   border:1px solid var(--line); border-radius:8px; background:#fff;
@@ -942,6 +942,14 @@ mark.hl-ab{ background:repeating-linear-gradient(135deg, #ffc400 0 4px, #4fc3ff 
       openBtn.addEventListener('click', function(){ openTokenPage(tokens, target, cs); });
       var openRow = el('div', 'vocab-open');
       openRow.appendChild(openBtn);
+      var dlVocab = el('button', 'btn', 'Stáhnout slovník (.tsv)');
+      dlVocab.type = 'button';
+      dlVocab.addEventListener('click', function(){ downloadVocab(tokens); });
+      openRow.appendChild(dlVocab);
+      var dlMerges = el('button', 'btn', 'Stáhnout postup sloučení (.tsv)');
+      dlMerges.type = 'button';
+      dlMerges.addEventListener('click', function(){ downloadMerges(merges); });
+      openRow.appendChild(dlMerges);
       vocabOut.appendChild(openRow);
       if(exhausted){
         vocabOut.appendChild(el('p', 'vocab-note', 'Slovník nelze zvětšit na ' + target + ': všechna slova už jsou jediným symbolem.'));
@@ -983,6 +991,33 @@ mark.hl-ab{ background:repeating-linear-gradient(135deg, #ffc400 0 4px, #4fc3ff 
         vocabOut.appendChild(wrap);
       }
     }
+    // export: soubory .tsv (oddělené tabulátory, UTF-8 se značkou pro Excel)
+    function downloadText(name, text){
+      var blob = new Blob(['\uFEFF' + text], {type: 'text/tab-separated-values;charset=utf-8'});
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function(){ URL.revokeObjectURL(a.href); }, 1000);
+    }
+    // slovník: číslo tokenu (přirozené číslo od 1), tabulátor, token
+    function downloadVocab(tokens){
+      downloadText('slovnik-' + typeName + '.tsv', tokens.map(function(t, i){ return (i + 1) + '\t' + t; }).join('\n') + '\n');
+    }
+    // postup sloučení: krok, dvojice, nový symbol, četnosti (a poměr u WordPiece a SentencePiece)
+    function downloadMerges(merges){
+      var lines = [single ? 'krok\tdvojice\tnový symbol\t#(AB)\t#(A)\t#(B)\tpoměr' : 'krok\tdvojice\tnový symbol\tčetnost'];
+      merges.forEach(function(m, i){
+        var l = (i + 1) + '\t' + m.a + ' + ' + m.b + '\t' + m.sym + '\t' + m.count;
+        // poměr jako číslo (desetinná čárka, exponent E), aby ho tabulkový procesor přečetl
+        if(single) l += '\t' + m.ca + '\t' + m.cb + '\t' + (m.count / (m.ca * m.cb)).toPrecision(6).replace('.', ',').replace('e', 'E');
+        lines.push(l);
+      });
+      downloadText('postup-' + typeName + '.tsv', lines.join('\n') + '\n');
+    }
+
     // samostatná stránka se slovníkem tokenů; data se předávají přes localStorage
     function openTokenPage(tokens, target, cs){
       var note = vocabOut.querySelector('.vocab-note-open');
