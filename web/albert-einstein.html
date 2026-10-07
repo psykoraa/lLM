@@ -1004,8 +1004,11 @@ mark.hl-ab{ background:repeating-linear-gradient(135deg, #ffc400 0 4px, #4fc3ff 
     });
 
     // vlastní text místo článku (využívá program v počítači: karta Trénink)
-    function corpusChanged(name){
+    function corpusChanged(name, show, custom){
       articleName = name;
+      article.hidden = !show;   // vlastní text se rovnou zobrazí, původní článek je výchozí schovaný
+      var credit = article.parentNode.querySelector('.credit');   // zdroj platí jen pro text o Einsteinovi
+      if(credit) credit.hidden = custom;
       setArticleBtn();
       vocabOut.innerHTML = '';
       highlight();
@@ -1022,12 +1025,12 @@ mark.hl-ab{ background:repeating-linear-gradient(135deg, #ffc400 0 4px, #4fc3ff 
         });
         article.appendChild(panel);
         makeCollapsible(panel);
-        corpusChanged('vlastní text');
+        corpusChanged('vlastní text', true, true);
       },
       resetText: function(){
         article.innerHTML = articleHTML;
         Array.prototype.forEach.call(article.querySelectorAll('.panel'), makeCollapsible);
-        corpusChanged('text o Albertu Einsteinovi');
+        corpusChanged('text o Albertu Einsteinovi', false, false);
       }
     });
   }

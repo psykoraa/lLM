@@ -62,60 +62,77 @@
   quitRow.appendChild(quit);
   wrap.appendChild(quitRow);
 
-  // karta Trénink: vlastní text jako korpus (místo textu o Albertu Einsteinovi)
-  var area = document.getElementById('in-trenink');
-  if(area && window.llmCorpus){
-    var panel = area.closest('.panel');
-    var bar = document.createElement('div');
-    bar.style.cssText = 'display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:12px;';
-    function button(text, cls){
+  // Text (korpus) na kartě Tokenizace: načíst ze souboru nebo vložit; objeví se dole na stránce
+  // (u každého algoritmu) a hledá se v něm i tvoří slovník. Původní text o Albertu Einsteinovi
+  // lze vrátit.
+  var view = document.getElementById('view-tokenizace');
+  if(view && window.llmCorpus){
+    var panel = document.createElement('div');
+    panel.className = 'panel';
+    panel.innerHTML =
+      '<div class="panel-title">Text (korpus)</div>' +
+      '<div id="corpus-bar" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;"></div>' +
+      '<div id="corpus-paste" hidden style="margin-top:12px;">' +
+        '<textarea id="corpus-text" class="big-text" spellcheck="false" placeholder="Sem vložte libovolně dlouhý text…"></textarea>' +
+        '<div style="margin-top:10px;"></div>' +
+      '</div>' +
+      '<p class="hint" id="corpus-status" style="margin:10px 0 0;"></p>';
+    view.insertBefore(panel, view.firstChild);
+
+    var bar = panel.querySelector('#corpus-bar');
+    var pasteBox = panel.querySelector('#corpus-paste');
+    var area = panel.querySelector('#corpus-text');
+    var status = panel.querySelector('#corpus-status');
+    function button(parent, text, cls){
       var b = document.createElement('button');
       b.type = 'button';
       b.className = 'btn' + (cls ? ' ' + cls : '');
       b.textContent = text;
-      bar.appendChild(b);
+      parent.appendChild(b);
       return b;
     }
-    var fileBtn = button('Načíst ze souboru…', '');
-    var useBtn = button('Použít text jako korpus', 'primary');
-    var resetBtn = button('Vrátit text o Albertu Einsteinovi', '');
+    var fileBtn = button(bar, 'Načíst ze souboru…', '');
+    var pasteBtn = button(bar, 'Vložit text…', '');
+    var resetBtn = button(bar, 'Vrátit text o Albertu Einsteinovi', '');
+    var useBtn = button(pasteBox.lastChild, 'Použít tento text', 'primary');
     var fileIn = document.createElement('input');
     fileIn.type = 'file';
     fileIn.accept = '.txt,.md,.csv,.tsv,.html,.json,text/*';
     fileIn.hidden = true;
     bar.appendChild(fileIn);
-    var status = document.createElement('p');
-    status.className = 'hint';
-    status.style.cssText = 'margin:10px 0 0;';
-    status.textContent = 'Korpus: text o Albertu Einsteinovi. Hledání a slovníky na kartě Tokenizace pracují s korpusem.';
-    panel.appendChild(bar);
-    panel.appendChild(status);
+
+    function say(text){ status.textContent = text; }
+    say('Teď se pracuje s textem o Albertu Einsteinovi (předpřipravený, dole na stránce). Můžete načíst nebo vložit vlastní text.');
 
     function use(text, name){
-      if(!text.trim()){ status.textContent = 'Vložte text nebo ho načtěte ze souboru.'; return; }
+      if(!text.trim()){ say('Vložte text nebo ho načtěte ze souboru.'); return; }
       window.llmCorpus.set(text);
-      status.textContent = 'Korpus: ' + name + ' (' + text.length.toLocaleString('cs-CZ') + ' znaků). Přepněte na kartu Tokenizace.';
-      var tab = document.getElementById('top-tab-tokenizace');
-      if(tab) tab.click();
+      say('Teď se pracuje s textem: ' + name + ' (' + text.length.toLocaleString('cs-CZ') + ' znaků). Zobrazen je dole na stránce, zvýrazňuje se v něm hledané a z něj se tvoří slovník.');
     }
-    useBtn.addEventListener('click', function(){ use(area.value, 'vlastní text'); });
-    resetBtn.addEventListener('click', function(){
-      window.llmCorpus.reset();
-      status.textContent = 'Korpus: text o Albertu Einsteinovi.';
-    });
     fileBtn.addEventListener('click', function(){ fileIn.click(); });
     fileIn.addEventListener('change', function(){
       var f = fileIn.files[0];
       if(!f) return;
       var r = new FileReader();
-      r.onload = function(){ area.value = r.result; use(r.result, f.name); };
-      r.onerror = function(){ status.textContent = 'Soubor se nepodařilo přečíst.'; };
+      r.onload = function(){ area.value = r.result; pasteBox.hidden = true; use(r.result, f.name); };
+      r.onerror = function(){ say('Soubor se nepodařilo přečíst.'); };
       r.readAsText(f, 'UTF-8');
+      fileIn.value = '';
+    });
+    pasteBtn.addEventListener('click', function(){
+      pasteBox.hidden = !pasteBox.hidden;
+      if(!pasteBox.hidden) area.focus();
+    });
+    useBtn.addEventListener('click', function(){ use(area.value, 'vložený text'); });
+    resetBtn.addEventListener('click', function(){
+      window.llmCorpus.reset();
+      area.value = '';
+      say('Teď se pracuje s textem o Albertu Einsteinovi (předpřipravený).');
     });
 
     // soubor přetažený na program
     call('GET', '/api/initial', undefined, function(st, d){
-      if(d && d.text){ area.value = d.text; use(d.text, d.name); }
+      if(d && d.text){ area.value = ''; use(d.text, d.name); }
     });
   }
 })();

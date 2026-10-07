@@ -29,14 +29,14 @@ Hotové programy jsou ve složce [`bin/`](bin/) (nic se neinstaluje):
    - text o Albertu Einsteinovi (zobrazit/skrýt, sbalitelné panely),
    - tvorba **slovníku** o zadané velikosti (tabulka sloučení, počáteční znaky) a samostatná stránka
      **Slovník tokenů** s číslovanými tokeny,
-   - karta **Trénink**: vložte nebo načtěte ze souboru **vlastní text** a tlačítkem „Použít text jako korpus“
-     ho použijte místo textu o Einsteinovi (hledání i slovníky pak pracují s ním);
-     „Vrátit text o Albertu Einsteinovi“ vrátí původní text.
+   - nahoře na kartě Tokenizace panel **Text (korpus)**: **Načíst ze souboru…** nebo **Vložit text…**
+     a **Použít tento text**. Vlastní text se objeví dole na stránce (u každého algoritmu), zvýrazňuje se
+     v něm hledané a tvoří se z něj slovník; **Vrátit text o Albertu Einsteinovi** vrátí původní text.
 3. Program skončí, když okno v prohlížeči zavřete, nebo tlačítkem **Ukončit program**.
 
 Výpočet probíhá v programu na vašem počítači (okno komunikuje jen s ním, přes adresu
 `127.0.0.1`), text nikam neodchází a není potřeba internet (kromě načtení písem).
-Na program lze také **přetáhnout textový soubor** – okno se otevře s tímto textem jako korpusem.
+Na program lze také **přetáhnout textový soubor** – okno se otevře s tímto textem.
 Vytvořený slovník, který otevřete na stránce „Slovník tokenů“, zůstane uložený v prohlížeči.
 
 **Z příkazového řádku:**
