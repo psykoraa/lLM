@@ -19,17 +19,25 @@ Hotové programy jsou ve složce [`bin/`](bin/) (nic se neinstaluje):
 
 **Nejjednodušeji (Windows):**
 
-1. Stáhněte `llm-windows-amd64.exe` a ukázkový text `priklady/einstein.txt` do jedné složky.
-2. **Dvakrát klikněte na program.** Po chvilce se ve vašem prohlížeči otevře okno, které vypadá
-   jako webová stránka: vložíte text (nebo ho načtete ze souboru), vyberete algoritmus
-   (BPE, WordPiece, SentencePiece), zadáte velikost slovníku a kliknete na **Vytvořit slovník**.
-3. Výsledek se ukáže na stránce (slovník s čísly tokenů, počáteční znaky, tabulka sloučení)
-   a jde stáhnout jako soubor `.tsv`.
-4. Program skončí, když okno v prohlížeči zavřete, nebo tlačítkem **Ukončit program**.
+1. Stáhněte `llm-windows-amd64.exe` do libovolné složky (ukázkový text je v `priklady/einstein.txt`).
+2. **Dvakrát klikněte na program.** Po chvilce se ve vašem prohlížeči otevře **celá webová stránka**
+   „Albert Einstein“ (stejná jako `albert-einstein.html`), jen místo pomalého počítání v prohlížeči
+   slovníky počítá program:
+   - karta **Tokenizace** s přepínačem **BPE / WordPiece / SentencePiece**,
+   - hledání písmen a skupin písmen ve zvýrazněném textu s počty výskytů (u WordPiece a SentencePiece
+     i rozklady na dva tokeny a hodnoty podílu),
+   - text o Albertu Einsteinovi (zobrazit/skrýt, sbalitelné panely),
+   - tvorba **slovníku** o zadané velikosti (tabulka sloučení, počáteční znaky) a samostatná stránka
+     **Slovník tokenů** s číslovanými tokeny,
+   - karta **Trénink**: vložte nebo načtěte ze souboru **vlastní text** a tlačítkem „Použít text jako korpus“
+     ho použijte místo textu o Einsteinovi (hledání i slovníky pak pracují s ním);
+     „Vrátit text o Albertu Einsteinovi“ vrátí původní text.
+3. Program skončí, když okno v prohlížeči zavřete, nebo tlačítkem **Ukončit program**.
 
 Výpočet probíhá v programu na vašem počítači (okno komunikuje jen s ním, přes adresu
-`127.0.0.1`), text nikam neodchází a není potřeba internet.
-Na program lze také **přetáhnout textový soubor** – okno se otevře s načteným textem.
+`127.0.0.1`), text nikam neodchází a není potřeba internet (kromě načtení písem).
+Na program lze také **přetáhnout textový soubor** – okno se otevře s tímto textem jako korpusem.
+Vytvořený slovník, který otevřete na stránce „Slovník tokenů“, zůstane uložený v prohlížeči.
 
 **Z příkazového řádku:**
 
@@ -45,7 +53,7 @@ llm-windows-amd64.exe console            (otázky v černém okně místo prohl�
 ## Použití z příkazového řádku
 
 ```
-llm                      okno v prohlížeči (stejné jako dvojklik)
+llm                      okno v prohlížeči se stránkou (stejné jako dvojklik)
 llm soubor.txt           okno v prohlížeči s načteným textem
 llm console [soubor]     otázky v černém okně
 llm train [volby] soubor.txt
@@ -151,4 +159,16 @@ Potřebujete [Go](https://go.dev/dl/) 1.24 nebo novější.
 go test ./...        # testy
 go build -o llm .    # sestavení pro tento počítač
 ./build.sh           # programy pro Windows, macOS a Linux do složky bin/
+```
+
+## Webová stránka v programu
+
+Okno v prohlížeči je **skutečná webová stránka** z repozitáře
+[matematika](https://github.com/psykoraa/matematika), zabudovaná v programu (složka `web/`).
+Program k ní jen přidá rychlý výpočet (`web/program.js`, serverová část `gui.go`).
+Po změně stránky v repozitáři `matematika` ji do programu přeneste a programy přebudujte:
+
+```
+./sync-web.sh /cesta/k/repozitari/matematika
+./build.sh
 ```

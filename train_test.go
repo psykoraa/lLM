@@ -79,6 +79,7 @@ func trainNaive(c *Corpus, alg Algorithm, size int) *Result {
 			}
 			seqs[i] = nw
 		}
+		m.Dup = inVocab[m.New]
 		if !inVocab[m.New] {
 			inVocab[m.New] = true
 			res.Tokens = append(res.Tokens, m.New)

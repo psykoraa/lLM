@@ -17,8 +17,14 @@ import (
 	"time"
 )
 
-//go:embed web/index.html web/styl.css
+// Webová stránka (albert-einstein.html, slovnik-tokenu.html) je zabudovaná v programu.
+// Program ji zobrazí v prohlížeči a jen výpočet slovníku provede sám (rychle).
+//
+//go:embed web/albert-einstein.html web/slovnik-tokenu.html web/program.js web/spolecne/styl.css
 var webFS embed.FS
+
+// Přednostní port: při stejném portu zůstane uložený slovník v prohlížeči i po novém spuštění.
+const preferredPort = 47831
 
 type apiRequest struct {
 	Text       string `json:"text"`
@@ -34,17 +40,18 @@ type apiMerge struct {
 	Count  int    `json:"count"`
 	CountA int    `json:"countA"`
 	CountB int    `json:"countB"`
+	Dup    bool   `json:"dup,omitempty"`
 }
 
 type apiResponse struct {
-	Error     string     `json:"error,omitempty"`
+	Error     string     `json:"error,omitempty"` // "nowords", "toosmall" nebo text chyby
+	Chars     int        `json:"chars,omitempty"`
 	Initial   []string   `json:"initial,omitempty"`
 	Tokens    []string   `json:"tokens,omitempty"`
 	Merges    []apiMerge `json:"merges,omitempty"`
 	Exhausted bool       `json:"exhausted,omitempty"`
 	Words     int        `json:"words,omitempty"`
 	Total     int        `json:"total,omitempty"`
-	Unit      string     `json:"unit,omitempty"`
 	Ms        int64      `json:"ms"`
 }
 
@@ -52,7 +59,7 @@ type guiServer struct {
 	token       string
 	initialName string
 	initialText string
-	lastSeen    atomic.Int64 // čas posledního pingu stránky (unix ms)
+	lastSeen    atomic.Int64 // čas posledního kontaktu stránky (unix ms)
 	closingAt   atomic.Int64 // čas, kdy se stránka zavřela (unix ms), 0 = není
 	quit        chan struct{}
 }
@@ -63,7 +70,7 @@ func nowMs() int64 { return time.Now().UnixMilli() }
 func runGUI(args []string) int {
 	fs := flag.NewFlagSet("gui", flag.ContinueOnError)
 	noBrowser := fs.Bool("no-browser", false, "neotvírat prohlížeč (jen vypsat adresu)")
-	port := fs.Int("port", 0, "port (0 = volný port vybere systém)")
+	port := fs.Int("port", preferredPort, "port (0 = volný port vybere systém)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -85,6 +92,9 @@ func runGUI(args []string) int {
 	srv.token = hex.EncodeToString(tok)
 
 	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", *port))
+	if err != nil && *port != 0 {
+		ln, err = net.Listen("tcp", "127.0.0.1:0") // port je obsazený (např. běží druhá kopie)
+	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Nepodařilo se spustit místní server:", err)
 		return 1
@@ -92,8 +102,8 @@ func runGUI(args []string) int {
 	url := fmt.Sprintf("http://%s/?t=%s", ln.Addr().String(), srv.token)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", srv.handleIndex)
-	mux.HandleFunc("/styl.css", srv.handleCSS)
+	mux.HandleFunc("/", srv.handlePage)
+	mux.HandleFunc("/spolecne/styl.css", srv.handleCSS)
 	mux.HandleFunc("/api/ping", srv.auth(srv.handlePing))
 	mux.HandleFunc("/api/initial", srv.auth(srv.handleInitial))
 	mux.HandleFunc("/api/train", srv.auth(srv.handleTrain))
@@ -156,8 +166,16 @@ func (s *guiServer) auth(h http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-func (s *guiServer) handleIndex(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/" {
+// handlePage vrací webovou stránku (hlavní nebo stránku se slovníkem tokenů); bez přístupového
+// klíče v adrese ji nevydá.
+func (s *guiServer) handlePage(w http.ResponseWriter, r *http.Request) {
+	var name string
+	switch r.URL.Path {
+	case "/":
+		name = "web/albert-einstein.html"
+	case "/slovnik-tokenu.html":
+		name = "web/slovnik-tokenu.html"
+	default:
 		http.NotFound(w, r)
 		return
 	}
@@ -165,8 +183,15 @@ func (s *guiServer) handleIndex(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Neplatná adresa. Spusťte program znovu.", http.StatusForbidden)
 		return
 	}
-	b, _ := webFS.ReadFile("web/index.html")
-	page := strings.Replace(string(b), "__TOKEN__", s.token, 1)
+	b, _ := webFS.ReadFile(name)
+	page := string(b)
+	if name == "web/albert-einstein.html" {
+		js, _ := webFS.ReadFile("web/program.js")
+		inject := `<script>window.__LLM_TOKEN__="` + s.token + `";</script>` + "\n<script>\n" + string(js) + "\n</script>\n</body>"
+		page = strings.Replace(page, "</body>", inject, 1)
+	} else {
+		page = strings.Replace(page, `href="albert-einstein.html"`, `href="/?t=`+s.token+`"`, 1)
+	}
 	s.lastSeen.Store(nowMs())
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
@@ -174,7 +199,7 @@ func (s *guiServer) handleIndex(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *guiServer) handleCSS(w http.ResponseWriter, r *http.Request) {
-	b, _ := webFS.ReadFile("web/styl.css")
+	b, _ := webFS.ReadFile("web/spolecne/styl.css")
 	w.Header().Set("Content-Type", "text/css; charset=utf-8")
 	w.Write(b)
 }
@@ -238,13 +263,13 @@ func (s *guiServer) handleTrain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(corpus.Words) == 0 {
-		writeJSON(w, apiResponse{Error: "V textu nejsou žádná slova (písmena nebo číslice)."})
+		writeJSON(w, apiResponse{Error: "nowords"})
 		return
 	}
 	res, err := Train(corpus, alg, req.Size)
 	if err != nil {
 		if e, ok := err.(ErrTooSmall); ok {
-			writeJSON(w, apiResponse{Error: fmt.Sprintf("Slovník jednotlivých znaků má už %d symbolů. Zadejte alespoň toto číslo.", e.Chars)})
+			writeJSON(w, apiResponse{Error: "toosmall", Chars: e.Chars})
 			return
 		}
 		writeJSON(w, apiResponse{Error: err.Error()})
@@ -256,15 +281,11 @@ func (s *guiServer) handleTrain(w http.ResponseWriter, r *http.Request) {
 		Exhausted: res.Exhausted,
 		Words:     len(corpus.Words),
 		Total:     corpus.Total,
-		Unit:      "různých slov",
 		Ms:        time.Since(t0).Milliseconds(),
-	}
-	if alg == SentencePiece {
-		out.Unit = "různých řádků"
 	}
 	out.Merges = make([]apiMerge, len(res.Merges))
 	for i, m := range res.Merges {
-		out.Merges[i] = apiMerge{A: m.A, B: m.B, New: m.New, Count: m.Count, CountA: m.CountA, CountB: m.CountB}
+		out.Merges[i] = apiMerge{A: m.A, B: m.B, New: m.New, Count: m.Count, CountA: m.CountA, CountB: m.CountB, Dup: m.Dup}
 	}
 	writeJSON(w, out)
 }

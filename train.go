@@ -12,6 +12,7 @@ type Merge struct {
 	Count     int // #(AB): kolikrát se dvojice vyskytuje vedle sebe
 	CountA    int // #(A) a #(B) v okamžiku výběru (jen WordPiece a SentencePiece)
 	CountB    int
+	Dup       bool // zápis nového symbolu už ve slovníku je (neroste velikost slovníku)
 }
 
 // Result je slovník a postup jeho vzniku.
@@ -458,6 +459,7 @@ func Train(c *Corpus, alg Algorithm, size int) (*Result, error) {
 		}
 		m.New = m.A + m.B
 		x, dup := t.intern(m.New)
+		m.Dup = dup
 		t.merge(p, x)
 		if !dup {
 			res.Tokens = append(res.Tokens, m.New)

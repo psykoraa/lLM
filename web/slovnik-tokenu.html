@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Slovník tokenů</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800&family=Work+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="spolecne/styl.css">
+<style>
+:root{
+  --paper:#f5f0e3;
+  --surface:#fffcf5;
+  --surface-2:#ece4d1;
+  --ink:#212b34;
+  --ink-soft:#5d6b76;
+  --line:rgba(33,43,52,0.12);
+  --accent:#c9581f;
+  --accent-ink:#fff8f0;
+  --success:#28794f;
+  --success-bg:#e3efe0;
+  --danger:#b3392b;
+  --danger-bg:#f5e4de;
+  --focus:#1e6f66;
+}
+
+.wrap{ max-width:1100px; }
+
+.token-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill, minmax(150px, 1fr));
+  gap:8px;
+  margin:0; padding:0; list-style:none;
+}
+.token-grid li{
+  display:flex; align-items:baseline; gap:10px;
+  background:var(--surface);
+  border:1px solid var(--line);
+  border-radius:8px;
+  padding:7px 11px;
+}
+.token-id{
+  flex:none; min-width:3.2em;
+  font-family:'IBM Plex Mono', monospace; font-weight:500; font-size:0.82rem;
+  color:var(--ink-soft); text-align:right; font-variant-numeric:tabular-nums;
+}
+.token{
+  font-family:'IBM Plex Mono', monospace; font-weight:700; font-size:1.1rem;
+  color:var(--ink); overflow-wrap:anywhere;
+}
+.empty{ font-size:0.95rem; color:var(--ink-soft); line-height:1.6; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <a class="back-link" href="albert-einstein.html">← Zpět na Tokenizaci</a>
+
+  <div class="brand">
+    <div class="brand-lockup">
+      <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect x="4" y="6" width="14" height="12" rx="2" stroke="var(--accent)" stroke-width="2"/>
+        <rect x="22" y="6" width="14" height="12" rx="2" stroke="var(--ink-soft)" stroke-width="2"/>
+        <rect x="4" y="22" width="14" height="12" rx="2" stroke="var(--ink-soft)" stroke-width="2"/>
+        <rect x="22" y="22" width="14" height="12" rx="2" stroke="var(--accent)" stroke-width="2"/>
+      </svg>
+      <div class="brand-text">
+        <h1>Slovník tokenů</h1>
+        <p id="brand-p">&nbsp;</p>
+      </div>
+    </div>
+  </div>
+
+  <ul class="token-grid" id="token-grid"></ul>
+  <p class="empty" id="empty" hidden>Slovník zatím není vytvořený. Vraťte se na stránku Tokenizace, zadejte velikost slovníku, klikněte na „Vytvořit slovník“ a potom na „Zobrazit slovník tokenů“ (u stejného algoritmu: BPE, WordPiece nebo SentencePiece).</p>
+
+  <footer>Matematický seminář — velké jazykové modely</footer>
+</div>
+
+<script>
+(function(){
+  'use strict';
+
+  // ?typ=wordpiece, ?typ=sentencepiece nebo ?typ=bpe (výchozí)
+  var typ = /[?&]typ=(wordpiece|sentencepiece)/.exec(window.location.search);
+  typ = typ ? typ[1] : 'bpe';
+  var typNazev = {bpe: 'BPE', wordpiece: 'WordPiece', sentencepiece: 'SentencePiece'}[typ];
+  var data = null;
+  try{
+    data = JSON.parse(localStorage.getItem('matematika:' + typ + '-slovnik'));
+  }catch(e){ data = null; }
+
+  var grid = document.getElementById('token-grid');
+  if(!data || !data.tokens || !data.tokens.length){
+    document.getElementById('empty').hidden = false;
+    return;
+  }
+
+  // každému tokenu se přiřadí přirozené číslo 1, 2, 3, ...
+  var frag = document.createDocumentFragment();
+  data.tokens.forEach(function(t, i){
+    var li = document.createElement('li');
+    var id = document.createElement('span');
+    id.className = 'token-id';
+    id.textContent = String(i + 1);
+    var tok = document.createElement('span');
+    tok.className = 'token';
+    tok.textContent = t;
+    li.appendChild(id);
+    li.appendChild(tok);
+    frag.appendChild(li);
+  });
+  grid.appendChild(frag);
+  document.getElementById('brand-p').textContent = typNazev + ', ' + data.tokens.length + ' tokenů';
+})();
+</script>
+
+</body>
+</html>
