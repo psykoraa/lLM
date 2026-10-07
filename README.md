@@ -20,22 +20,40 @@ Hotové programy jsou ve složce [`bin/`](bin/) (nic se neinstaluje):
 **Nejjednodušeji (Windows):**
 
 1. Stáhněte `llm-windows-amd64.exe` a ukázkový text `priklady/einstein.txt` do jedné složky.
-2. **Dvakrát klikněte na program** (otevře se černé okno), nebo na něj **myší přetáhněte textový soubor**.
-3. Program se zeptá na soubor, algoritmus (1 = BPE, 2 = WordPiece, 3 = SentencePiece), velikost slovníku
-   a rozlišování velkých a malých písmen. Potom výsledek zapíše vedle vašeho textu
-   (`…-slovnik.tsv` a `…-postup.tsv`). Okno se nezavře, dokud nestisknete Enter.
+2. **Dvakrát klikněte na program.** Po chvilce se ve vašem prohlížeči otevře okno, které vypadá
+   jako webová stránka: vložíte text (nebo ho načtete ze souboru), vyberete algoritmus
+   (BPE, WordPiece, SentencePiece), zadáte velikost slovníku a kliknete na **Vytvořit slovník**.
+3. Výsledek se ukáže na stránce (slovník s čísly tokenů, počáteční znaky, tabulka sloučení)
+   a jde stáhnout jako soubor `.tsv`.
+4. Program skončí, když okno v prohlížeči zavřete, nebo tlačítkem **Ukončit program**.
+
+Výpočet probíhá v programu na vašem počítači (okno komunikuje jen s ním, přes adresu
+`127.0.0.1`), text nikam neodchází a není potřeba internet.
+Na program lze také **přetáhnout textový soubor** – okno se otevře s načteným textem.
 
 **Z příkazového řádku:**
 
 ```
 llm-windows-amd64.exe train -algo bpe -size 5000 -o slovnik.tsv einstein.txt
+llm-windows-amd64.exe console            (otázky v černém okně místo prohlížeče)
 ```
 
 > Windows může při prvním spuštění zobrazit upozornění SmartScreen (program není podepsaný);
 > zvolte „Další informace → Přesto spustit“. Na macOS a Linuxu je potřeba soubor nejdřív
 > povolit ke spuštění: `chmod +x bin/llm-macos-apple-silicon`.
 
-## Použití
+## Použití z příkazového řádku
+
+```
+llm                      okno v prohlížeči (stejné jako dvojklik)
+llm soubor.txt           okno v prohlížeči s načteným textem
+llm console [soubor]     otázky v černém okně
+llm train [volby] soubor.txt
+```
+
+`llm gui -no-browser` jen vypíše adresu a prohlížeč neotevře (např. pro vlastní prohlížeč).
+
+### Příkazový režim `train`
 
 ```
 llm train [volby] soubor.txt

@@ -12,7 +12,10 @@ import (
 )
 
 const usage = `Použití:
-  llm train [volby] soubor.txt
+  llm                      okno v prohlížeči (dvojklik na program)
+  llm soubor.txt           okno v prohlížeči s načteným textem (přetažení souboru na program)
+  llm console [soubor]     otázky v černém okně
+  llm train [volby] soubor.txt   příkazový řádek (viz níže)
 
 Sestaví slovník tokenů (BPE, WordPiece nebo SentencePiece) z textového souboru (UTF-8).
 Místo souboru lze zadat "-" (čte se standardní vstup).
@@ -24,16 +27,25 @@ func main() {
 	args := os.Args[1:]
 	switch {
 	case len(args) == 0:
-		// dvojklik na program: interaktivní režim
-		os.Exit(runInteractive(""))
+		// dvojklik na program: okno v prohlížeči
+		os.Exit(runGUI(nil))
 	case args[0] == "train":
 		if err := runTrain(args[1:]); err != nil {
 			fmt.Fprintln(os.Stderr, "Chyba:", err)
 			os.Exit(1)
 		}
+	case args[0] == "gui":
+		os.Exit(runGUI(args[1:]))
+	case args[0] == "console":
+		// otázky v černém okně (bez prohlížeče)
+		path := ""
+		if len(args) > 1 {
+			path = args[1]
+		}
+		os.Exit(runInteractive(path))
 	case len(args) == 1 && !strings.HasPrefix(args[0], "-") && args[0] != "help":
-		// soubor přetažený myší na program: interaktivní režim s tímto souborem
-		os.Exit(runInteractive(args[0]))
+		// soubor přetažený myší na program: okno v prohlížeči s načteným textem
+		os.Exit(runGUI(args))
 	default:
 		fmt.Fprint(os.Stderr, usage)
 		trainFlags().PrintDefaults()
