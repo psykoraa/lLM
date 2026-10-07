@@ -1,3 +1,3 @@
-module github.com/psykoraa/LLM
+module github.com/psykoraa/llm
 
 go 1.24
