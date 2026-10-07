@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -77,8 +78,8 @@ func runGUI(args []string) int {
 	srv := &guiServer{quit: make(chan struct{})}
 	if fs.NArg() == 1 {
 		// soubor přetažený na program nebo zadaný na příkazové řádce
-		if b, err := os.ReadFile(fs.Arg(0)); err == nil {
-			srv.initialText = string(b)
+		if text, err := readInputText(fs.Arg(0)); err == nil {
+			srv.initialText = text
 			srv.initialName = fs.Arg(0)
 		} else {
 			fmt.Fprintln(os.Stderr, "Soubor se nepodařilo načíst:", err)
@@ -107,6 +108,7 @@ func runGUI(args []string) int {
 	mux.HandleFunc("/api/ping", srv.auth(srv.handlePing))
 	mux.HandleFunc("/api/initial", srv.auth(srv.handleInitial))
 	mux.HandleFunc("/api/train", srv.auth(srv.handleTrain))
+	mux.HandleFunc("/api/pdf", srv.auth(srv.handlePDF))
 	mux.HandleFunc("/api/quit", srv.auth(srv.handleQuit))
 	mux.HandleFunc("/api/closing", srv.handleClosing)
 
@@ -233,6 +235,26 @@ func (s *guiServer) handleQuit(w http.ResponseWriter, r *http.Request) {
 	default:
 		close(s.quit)
 	}
+}
+
+// handlePDF přijme PDF (surové bajty) a vrátí z něj vytažený text.
+func (s *guiServer) handlePDF(w http.ResponseWriter, r *http.Request) {
+	s.lastSeen.Store(nowMs())
+	if r.Method != http.MethodPost {
+		http.Error(w, "očekáván POST", http.StatusMethodNotAllowed)
+		return
+	}
+	b, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<30))
+	if err != nil {
+		writeJSON(w, map[string]string{"error": "Soubor se nepodařilo přijmout: " + err.Error()})
+		return
+	}
+	text, err := ExtractPDFText(b)
+	if err != nil {
+		writeJSON(w, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, map[string]string{"text": text})
 }
 
 func (s *guiServer) handleTrain(w http.ResponseWriter, r *http.Request) {

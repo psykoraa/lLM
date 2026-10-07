@@ -37,6 +37,8 @@ Hotové programy jsou ve složce [`bin/`](bin/) (nic se neinstaluje):
 Výpočet probíhá v programu na vašem počítači (okno komunikuje jen s ním, přes adresu
 `127.0.0.1`), text nikam neodchází a není potřeba internet (kromě načtení písem).
 Na program lze také **přetáhnout textový soubor** – okno se otevře s tímto textem.
+Kromě textových souborů (UTF-8) lze nahrát i **PDF** – program z něj vytáhne text. Funguje to jen u PDF
+s textovou vrstvou; u skenů (obrázků) je nejdřív potřeba rozpoznání textu (OCR).
 Vytvořený slovník, který otevřete na stránce „Slovník tokenů“, zůstane uložený v prohlížeči.
 
 **Z příkazového řádku:**
@@ -67,7 +69,7 @@ llm train [volby] soubor.txt
 llm train [volby] soubor.txt
 ```
 
-Vstupem je textový soubor v kódování **UTF-8** (nebo `-` pro standardní vstup).
+Vstupem je textový soubor v kódování **UTF-8** nebo **PDF** s textovou vrstvou (nebo `-` pro standardní vstup).
 
 | Volba | Význam |
 |---|---|

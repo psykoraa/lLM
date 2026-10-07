@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
-	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -93,18 +92,12 @@ func doTrain(path string, alg Algorithm, size int, ignoreCase bool, out, merges 
 	if size < 1 {
 		return fmt.Errorf("velikost slovníku musí být kladné číslo")
 	}
-	var in io.Reader = os.Stdin
-	if path != "-" {
-		f, err := os.Open(path)
-		if err != nil {
-			return err
-		}
-		defer f.Close()
-		in = f
-	}
-
 	t0 := time.Now()
-	corpus, err := BuildCorpus(in, alg, ignoreCase)
+	text, err := readInputText(path)
+	if err != nil {
+		return err
+	}
+	corpus, err := BuildCorpus(strings.NewReader(text), alg, ignoreCase)
 	if err != nil {
 		return err
 	}
