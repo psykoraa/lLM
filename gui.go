@@ -13,7 +13,9 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -63,6 +65,18 @@ type guiServer struct {
 	lastSeen    atomic.Int64 // čas posledního kontaktu stránky (unix ms)
 	closingAt   atomic.Int64 // čas, kdy se stránka zavřela (unix ms), 0 = není
 	quit        chan struct{}
+
+	mu      sync.Mutex
+	trained map[Algorithm]*trainedVocab // poslední hotový slovník každého algoritmu
+	matrix  *Matrix                     // naposledy vytvořená matice společného výskytu
+	matrixA Algorithm
+}
+
+// trainedVocab je poslední úspěšně vytvořený slovník s textem, ze kterého vznikl
+// (potřebuje ho matice společného výskytu).
+type trainedVocab struct {
+	corpus *Corpus
+	res    *Result
 }
 
 func nowMs() int64 { return time.Now().UnixMilli() }
@@ -75,7 +89,7 @@ func runGUI(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	srv := &guiServer{quit: make(chan struct{})}
+	srv := &guiServer{quit: make(chan struct{}), trained: map[Algorithm]*trainedVocab{}}
 	if fs.NArg() == 1 {
 		// soubor přetažený na program nebo zadaný na příkazové řádce
 		if text, err := readInputText(fs.Arg(0)); err == nil {
@@ -109,6 +123,9 @@ func runGUI(args []string) int {
 	mux.HandleFunc("/api/initial", srv.auth(srv.handleInitial))
 	mux.HandleFunc("/api/train", srv.auth(srv.handleTrain))
 	mux.HandleFunc("/api/pdf", srv.auth(srv.handlePDF))
+	mux.HandleFunc("/api/matrix", srv.auth(srv.handleMatrix))
+	mux.HandleFunc("/api/matrix/view", srv.auth(srv.handleMatrixView))
+	mux.HandleFunc("/api/matrix/download", srv.authQuery(srv.handleMatrixDownload))
 	mux.HandleFunc("/api/quit", srv.auth(srv.handleQuit))
 	mux.HandleFunc("/api/closing", srv.handleClosing)
 
@@ -161,6 +178,17 @@ func openBrowser(url string) error {
 func (s *guiServer) auth(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("X-Token") != s.token {
+			http.Error(w, "neplatný přístup", http.StatusForbidden)
+			return
+		}
+		h(w, r)
+	}
+}
+
+// authQuery je jako auth, ale přístupový klíč může být i v adrese (pro stažení souboru odkazem).
+func (s *guiServer) authQuery(h http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Token") != s.token && r.URL.Query().Get("t") != s.token {
 			http.Error(w, "neplatný přístup", http.StatusForbidden)
 			return
 		}
@@ -279,7 +307,7 @@ func (s *guiServer) handleTrain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	t0 := time.Now()
-	corpus, err := BuildCorpus(strings.NewReader(req.Text), alg, req.IgnoreCase)
+	corpus, err := BuildCorpusOrdered(strings.NewReader(req.Text), alg, req.IgnoreCase)
 	if err != nil {
 		writeJSON(w, apiResponse{Error: err.Error()})
 		return
@@ -297,6 +325,9 @@ func (s *guiServer) handleTrain(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, apiResponse{Error: err.Error()})
 		return
 	}
+	s.mu.Lock()
+	s.trained[alg] = &trainedVocab{corpus: corpus, res: res}
+	s.mu.Unlock()
 	out := apiResponse{
 		Initial:   res.Initial,
 		Tokens:    res.Tokens,
@@ -310,4 +341,125 @@ func (s *guiServer) handleTrain(w http.ResponseWriter, r *http.Request) {
 		out.Merges[i] = apiMerge{A: m.A, B: m.B, New: m.New, Count: m.Count, CountA: m.CountA, CountB: m.CountB, Dup: m.Dup}
 	}
 	writeJSON(w, out)
+}
+
+type matrixRequest struct {
+	Algo  string `json:"algo"`
+	Delta int    `json:"delta"`
+}
+
+type matrixResponse struct {
+	Error      string `json:"error,omitempty"`
+	Size       int    `json:"size,omitempty"`       // počet tokenů ve slovníku = rozměr matice
+	Delta      int    `json:"delta,omitempty"`      // Δ
+	TextTokens int    `json:"textTokens,omitempty"` // počet tokenů v textu
+	Nonzero    int    `json:"nonzero,omitempty"`    // počet nenulových buněk
+	Total      uint64 `json:"total,omitempty"`      // součet všech buněk
+	Ms         int64  `json:"ms"`
+}
+
+// handleMatrix vytvoří matici společného výskytu ze slovníku, který se naposledy vytvořil
+// zadaným algoritmem, a uloží ji pro zobrazení a stažení.
+func (s *guiServer) handleMatrix(w http.ResponseWriter, r *http.Request) {
+	s.lastSeen.Store(nowMs())
+	if r.Method != http.MethodPost {
+		http.Error(w, "očekáván POST", http.StatusMethodNotAllowed)
+		return
+	}
+	var req matrixRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil {
+		writeJSON(w, matrixResponse{Error: "Požadavek se nepodařilo přečíst: " + err.Error()})
+		return
+	}
+	alg, ok := ParseAlgorithm(req.Algo)
+	if !ok {
+		writeJSON(w, matrixResponse{Error: "Neznámý algoritmus."})
+		return
+	}
+	s.mu.Lock()
+	tv := s.trained[alg]
+	s.mu.Unlock()
+	if tv == nil {
+		writeJSON(w, matrixResponse{Error: "Slovník ještě není vytvořený. Vytvořte ho na kartě Tokenizace."})
+		return
+	}
+	t0 := time.Now()
+	seq, err := TokenSequence(tv.corpus, tv.res)
+	if err != nil {
+		writeJSON(w, matrixResponse{Error: err.Error()})
+		return
+	}
+	m, err := BuildMatrix(seq, tv.res.Tokens, req.Delta)
+	if err != nil {
+		writeJSON(w, matrixResponse{Error: err.Error()})
+		return
+	}
+	s.mu.Lock()
+	s.matrix, s.matrixA = m, alg
+	s.mu.Unlock()
+	writeJSON(w, matrixResponse{
+		Size: len(m.Tokens), Delta: m.Delta, TextTokens: m.TextTokens,
+		Nonzero: m.Nonzero, Total: m.Total, Ms: time.Since(t0).Milliseconds(),
+	})
+}
+
+type matrixViewToken struct {
+	N     int    `json:"n"` // číslo tokenu ve slovníku (od 1)
+	Token string `json:"token"`
+}
+
+type matrixViewResponse struct {
+	Error  string            `json:"error,omitempty"`
+	Tokens []matrixViewToken `json:"tokens,omitempty"`
+	Cells  [][]uint32        `json:"cells,omitempty"`
+	Size   int               `json:"size,omitempty"`
+}
+
+// handleMatrixView vrátí čtvercový výřez matice: k tokenů, buď prvních podle čísla (mode=index),
+// nebo nejčastějších (mode=freq).
+func (s *guiServer) handleMatrixView(w http.ResponseWriter, r *http.Request) {
+	s.lastSeen.Store(nowMs())
+	s.mu.Lock()
+	m := s.matrix
+	s.mu.Unlock()
+	if m == nil {
+		writeJSON(w, matrixViewResponse{Error: "Matice ještě není vytvořená."})
+		return
+	}
+	k, err := strconv.Atoi(r.URL.Query().Get("k"))
+	if err != nil || k < 1 {
+		k = 20
+	}
+	if k > 100 {
+		k = 100
+	}
+	idx := m.Pick(k, r.URL.Query().Get("mode") != "index")
+	v := len(m.Tokens)
+	out := matrixViewResponse{Size: v}
+	for _, i := range idx {
+		out.Tokens = append(out.Tokens, matrixViewToken{N: i + 1, Token: m.Tokens[i]})
+	}
+	for _, i := range idx {
+		row := make([]uint32, len(idx))
+		for j, c := range idx {
+			row[j] = m.Cells[i*v+c]
+		}
+		out.Cells = append(out.Cells, row)
+	}
+	writeJSON(w, out)
+}
+
+// handleMatrixDownload pošle celou matici jako soubor .tsv.
+func (s *guiServer) handleMatrixDownload(w http.ResponseWriter, r *http.Request) {
+	s.lastSeen.Store(nowMs())
+	s.mu.Lock()
+	m, alg := s.matrix, s.matrixA
+	s.mu.Unlock()
+	if m == nil {
+		http.Error(w, "Matice ještě není vytvořená.", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "text/tab-separated-values; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="matice-%s-delta%d.tsv"`, alg, m.Delta))
+	m.WriteTSV(w)
 }

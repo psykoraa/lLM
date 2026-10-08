@@ -21,6 +21,9 @@ type Result struct {
 	Tokens    []string // celý slovník: počáteční znaky a pak nové symboly v pořadí vzniku
 	Merges    []Merge
 	Exhausted bool // slovník nelze dále zvětšit
+	// Seg je výsledný rozklad každé řady korpusu (podle Corpus.Words) na tokeny; token je
+	// zadán svým číslem ve slovníku (index do Tokens, od 0).
+	Seg [][]int32
 }
 
 // ErrTooSmall: požadovaná velikost je menší než počet jednotlivých znaků.
@@ -466,5 +469,7 @@ func Train(c *Corpus, alg Algorithm, size int) (*Result, error) {
 		}
 		res.Merges = append(res.Merges, m)
 	}
+	// čísla symbolů se shodují s pořadím v res.Tokens (znaky, pak nové symboly v pořadí vzniku)
+	res.Seg = t.seqs
 	return res, nil
 }

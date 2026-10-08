@@ -29,10 +29,26 @@ Hotové programy jsou ve složce [`bin/`](bin/) (nic se neinstaluje):
    - text o Albertu Einsteinovi (zobrazit/skrýt, sbalitelné panely),
    - tvorba **slovníku** o zadané velikosti (tabulka sloučení, počáteční znaky) a samostatná stránka
      **Slovník tokenů** s číslovanými tokeny,
+   - karta **Trénink** s **maticí společného výskytu** (viz níže),
    - nahoře na kartě Tokenizace panel **Text (korpus)**: **Načíst ze souboru…** nebo **Vložit text…**
      a **Použít tento text**. Vlastní text se objeví dole na stránce (u každého algoritmu), zvýrazňuje se
      v něm hledané a tvoří se z něj slovník; **Vrátit text o Albertu Einsteinovi** vrátí původní text.
 3. Program skončí, když okno v prohlížeči zavřete, nebo tlačítkem **Ukončit program**.
+
+### Matice společného výskytu (karta Trénink)
+
+1. Na kartě **Tokenizace** vytvořte slovník (BPE, WordPiece nebo SentencePiece). Na kartě **Trénink**
+   lze vybrat jen slovník, který je právě vytvořený; ostatní jsou zakázané. Když změníte text nebo
+   slovník znovu vytvoříte, dosavadní matice se smaže.
+2. Zvolte šířku okna **Δ** (celé číslo 1 až 1000) a klikněte na **Vytvořit matici společného výskytu**.
+3. Program rozloží celý text na tokeny vybraného slovníku (tak, jak slovník při tvorbě slova rozložil)
+   a projde ho token po tokenu. Pro každou pozici *t* s tokenem *w* zvýší **M[w, c]** o 1 pro každý token *c*
+   na pozicích *t−Δ … t−1* a *t+1 … t+Δ* (samotná pozice se nepočítá, na okrajích textu se okno ořízne).
+   Číslo tokenu ve slovníku (od 1) je číslo řádku (*w*) a sloupce (*c*). Text se prochází jako jedna
+   posloupnost tokenů, okno tedy může přesáhnout i přes konec řádku nebo odstavce.
+4. Matici lze **zobrazit** na stránce (výřez *k* nejčastějších tokenů nebo prvních *k* podle čísla) a **stáhnout celou**
+   jako `.tsv` (první řádek a první sloupec obsahují tokeny, pořadí odpovídá číslům ve slovníku).
+   Matice je souměrná. Slovník může mít nejvýše asi 5 600 tokenů.
 
 Výpočet probíhá v programu na vašem počítači (okno komunikuje jen s ním, přes adresu
 `127.0.0.1`), text nikam neodchází a není potřeba internet (kromě načtení písem).

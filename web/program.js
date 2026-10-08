@@ -150,4 +150,273 @@
       if(d && d.text){ area.value = ''; use(d.text, d.name); }
     });
   }
+  // Karta Trénink: matice společného výskytu tokenů. Používá slovník, který je právě vytvořený na
+  // kartě Tokenizace (BPE, WordPiece nebo SentencePiece), a text, ze kterého vznikl.
+  var trenink = document.getElementById('view-trenink');
+  if(trenink && window.llmCorpus){
+    var ALGOS = [['bpe', 'BPE'], ['wordpiece', 'WordPiece'], ['sentencepiece', 'SentencePiece']];
+    var vocabs = {};        // algoritmus -> {n: počet tokenů} pro slovník, který je teď vytvořený
+    var shownAlgo = null;   // algoritmus matice, která je zobrazená níže
+
+    function h(tag, cls, text){
+      var e = document.createElement(tag);
+      if(cls) e.className = cls;
+      if(text !== undefined) e.textContent = text;
+      return e;
+    }
+    function fmt(n){ return Number(n).toLocaleString('cs-CZ'); }
+
+    var mp = h('div', 'panel');
+    mp.appendChild(h('div', 'panel-title', 'Matice společného výskytu'));
+    mp.appendChild(h('p', 'hint',
+      'Program projde text token po tokenu (tokeny podle vybraného slovníku). Pro každou pozici t vezme token w a ke každému tokenu c ' +
+      'na pozicích t−Δ, …, t−1, t+1, …, t+Δ zvýší hodnotu M[w, c] o 1; samotná pozice t se nepočítá. ' +
+      'Řádek matice je číslo tokenu w, sloupec číslo tokenu c (čísla jako ve slovníku, od 1). ' +
+      'M[w, c] je tedy počet, kolikrát se token c v celém textu vyskytl do vzdálenosti Δ od tokenu w.'));
+
+    var algoBox = h('div', 'field');
+    algoBox.appendChild(h('label', '', 'Slovník'));
+    var radios = {}, statuses = {};
+    ALGOS.forEach(function(a){
+      var row = h('div');
+      row.style.cssText = 'margin:4px 0;';
+      var lab = h('label');
+      lab.style.cssText = 'display:inline-flex;gap:8px;align-items:center;font-weight:500;color:inherit;margin:0;cursor:pointer;';
+      var r = document.createElement('input');
+      r.type = 'radio';
+      r.name = 'mx-algo';
+      r.value = a[0];
+      lab.appendChild(r);
+      lab.appendChild(document.createTextNode(a[1]));
+      var st = h('span', 'hint');
+      st.style.cssText = 'margin-left:10px;';
+      row.appendChild(lab);
+      row.appendChild(st);
+      algoBox.appendChild(row);
+      radios[a[0]] = r;
+      statuses[a[0]] = st;
+    });
+    mp.appendChild(algoBox);
+
+    var deltaField = h('div', 'field');
+    deltaField.style.cssText = 'max-width:220px;margin-top:12px;';
+    var deltaLabel = h('label', '', 'Šířka okna Δ');
+    deltaLabel.setAttribute('for', 'mx-delta');
+    var deltaWrap = h('div', 'input-wrap');
+    var deltaIn = document.createElement('input');
+    deltaIn.id = 'mx-delta';
+    deltaIn.type = 'number';
+    deltaIn.min = '1';
+    deltaIn.max = '1000';
+    deltaIn.step = '1';
+    deltaIn.value = '2';
+    deltaIn.setAttribute('inputmode', 'numeric');
+    deltaWrap.appendChild(deltaIn);
+    deltaField.appendChild(deltaLabel);
+    deltaField.appendChild(deltaWrap);
+    mp.appendChild(deltaField);
+
+    var mxBtnRow = h('div');
+    mxBtnRow.style.cssText = 'margin-top:14px;';
+    var mxBtn = h('button', 'btn primary', 'Vytvořit matici společného výskytu');
+    mxBtn.type = 'button';
+    mxBtnRow.appendChild(mxBtn);
+    mp.appendChild(mxBtnRow);
+    var mxStatus = h('p', 'hint');
+    mxStatus.style.cssText = 'margin:10px 0 0;';
+    mp.appendChild(mxStatus);
+    var mxOut = h('div');
+    mp.appendChild(mxOut);
+    trenink.appendChild(mp);
+
+    var NEEDS_VOCAB = 'Nejdřív vytvořte slovník na kartě Tokenizace.';
+    function selectedAlgo(){
+      for(var k in radios){ if(radios[k].checked && !radios[k].disabled) return k; }
+      return null;
+    }
+    // zaškrtnout lze jen slovník, který je teď vytvořený
+    function refresh(){
+      var firstOk = null;
+      ALGOS.forEach(function(a){
+        var ok = !!vocabs[a[0]];
+        radios[a[0]].disabled = !ok;
+        if(!ok) radios[a[0]].checked = false;
+        statuses[a[0]].textContent = ok
+          ? 'vytvořen, ' + fmt(vocabs[a[0]].n) + ' tokenů'
+          : 'zatím není vytvořen (vytvořte ho na kartě Tokenizace)';
+        if(ok && !firstOk) firstOk = a[0];
+      });
+      if(!selectedAlgo() && firstOk) radios[firstOk].checked = true;
+      mxBtn.disabled = !firstOk;
+      if(!firstOk) mxStatus.textContent = NEEDS_VOCAB;
+      else if(mxStatus.textContent === NEEDS_VOCAB) mxStatus.textContent = '';
+    }
+    function clearMatrix(){
+      mxOut.innerHTML = '';
+      shownAlgo = null;
+    }
+
+    // stránka tokenizace volá window.llmTrain při každém vytvoření slovníku: sledujeme, který slovník je hotový
+    var rawTrain = window.llmTrain;
+    window.llmTrain = function(req, cb){
+      delete vocabs[req.algo];
+      if(shownAlgo === req.algo) clearMatrix();
+      refresh();
+      rawTrain(req, function(res){
+        if(res && !res.error && res.tokens) vocabs[req.algo] = {n: res.tokens.length};
+        refresh();
+        cb(res);
+      });
+    };
+    // nový text znamená, že dosavadní slovníky a matice už k němu nepatří
+    ['set', 'reset'].forEach(function(name){
+      var orig = window.llmCorpus[name];
+      window.llmCorpus[name] = function(){
+        vocabs = {};
+        clearMatrix();
+        refresh();
+        return orig.apply(this, arguments);
+      };
+    });
+
+    function showMatrixView(){
+      var kIn = mxOut.querySelector('#mx-k');
+      var k = parseInt(kIn.value, 10);
+      if(!(k >= 1)) k = 15;
+      if(k > 100) k = 100;
+      kIn.value = String(k);
+      var mode = mxOut.querySelector('#mx-mode').value;
+      var box = mxOut.querySelector('#mx-table');
+      call('GET', '/api/matrix/view?k=' + k + '&mode=' + mode, undefined, function(st, d){
+        box.innerHTML = '';
+        if(!d || d.error){ box.appendChild(h('p', 'hint', (d && d.error) || 'Spojení s programem se přerušilo. Spusťte program znovu.')); return; }
+        var wrapT = h('div', 'vocab-scroll');
+        var table = h('table', 'theory-table');
+        var thead = h('thead');
+        var hr = h('tr');
+        var corner = h('th', 'mono', 'w \\ c');
+        corner.style.textTransform = 'none';
+        hr.appendChild(corner);
+        d.tokens.forEach(function(t){
+          var th = h('th', 'mono');
+          th.style.textTransform = 'none';   // tokeny se zobrazují přesně (na velikosti písmen záleží)
+          th.appendChild(document.createTextNode(t.token));
+          th.appendChild(document.createElement('br'));
+          var sm = h('small', '', String(t.n));
+          sm.style.cssText = 'font-weight:400;opacity:.7;';
+          th.appendChild(sm);
+          hr.appendChild(th);
+        });
+        thead.appendChild(hr);
+        table.appendChild(thead);
+        var tbody = h('tbody');
+        d.cells.forEach(function(row, i){
+          var tr = h('tr');
+          var th = h('th', 'mono');
+          th.style.cssText = 'text-align:left;white-space:nowrap;';
+          th.appendChild(document.createTextNode(d.tokens[i].token + ' '));
+          var sm = h('small', '', String(d.tokens[i].n));
+          sm.style.cssText = 'font-weight:400;opacity:.7;';
+          th.appendChild(sm);
+          tr.appendChild(th);
+          row.forEach(function(x){
+            var td = h('td', 'mono', String(x));
+            if(x === 0) td.style.opacity = '.35';
+            tr.appendChild(td);
+          });
+          tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
+        wrapT.appendChild(table);
+        box.appendChild(wrapT);
+        box.appendChild(h('p', 'hint', 'Zobrazeno ' + d.tokens.length + ' z ' + fmt(d.size) + ' tokenů; celou matici si stáhněte jako soubor.'));
+      });
+    }
+
+    function showMatrix(d, algoName){
+      mxOut.innerHTML = '';
+      var sum = h('p', 'vocab-sum');
+      sum.style.cssText = 'margin-top:14px;';
+      sum.appendChild(document.createTextNode('Matice '));
+      sum.appendChild(h('b', '', fmt(d.size) + ' × ' + fmt(d.size)));
+      sum.appendChild(document.createTextNode(' (slovník ' + algoName + ', Δ = ' + d.delta + '). Text má ' + fmt(d.textTokens) +
+        ' tokenů, nenulových buněk je ' + fmt(d.nonzero) + ' z ' + fmt(d.size * d.size) + ', součet všech hodnot je ' + fmt(d.total) +
+        '. Matice je souměrná (M[w, c] = M[c, w]). Spočítáno za ' + d.ms + ' ms.'));
+      mxOut.appendChild(sum);
+
+      var dl = h('button', 'btn primary', 'Stáhnout celou matici (.tsv)');
+      dl.type = 'button';
+      dl.addEventListener('click', function(){
+        var a = document.createElement('a');
+        a.href = '/api/matrix/download?t=' + encodeURIComponent(TOKEN);
+        a.setAttribute('download', '');
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      });
+      var dlRow = h('div');
+      dlRow.style.cssText = 'margin:10px 0;';
+      dlRow.appendChild(dl);
+      dlRow.appendChild(h('span', 'hint', ' První řádek a první sloupec obsahují tokeny, pořadí odpovídá číslům tokenů ve slovníku.'));
+      mxOut.appendChild(dlRow);
+
+      var ctl = h('div');
+      ctl.style.cssText = 'display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:10px 0;';
+      ctl.appendChild(document.createTextNode('Zobrazit'));
+      var kWrap = h('div', 'input-wrap');
+      kWrap.style.cssText = 'width:84px;';
+      var kIn = document.createElement('input');
+      kIn.id = 'mx-k';
+      kIn.type = 'number';
+      kIn.min = '1';
+      kIn.max = '100';
+      kIn.value = String(Math.min(15, d.size));
+      kWrap.appendChild(kIn);
+      ctl.appendChild(kWrap);
+      ctl.appendChild(document.createTextNode('tokenů:'));
+      var sel = document.createElement('select');
+      sel.id = 'mx-mode';
+      [['freq', 'nejčastějších (v okolí jiných tokenů)'], ['index', 'prvních podle čísla ve slovníku']].forEach(function(o){
+        var op = document.createElement('option');
+        op.value = o[0];
+        op.textContent = o[1];
+        sel.appendChild(op);
+      });
+      ctl.appendChild(sel);
+      var go = h('button', 'btn', 'Zobrazit');
+      go.type = 'button';
+      go.addEventListener('click', showMatrixView);
+      ctl.appendChild(go);
+      mxOut.appendChild(ctl);
+      kIn.addEventListener('keydown', function(e){ if(e.key === 'Enter'){ e.preventDefault(); showMatrixView(); } });
+      sel.addEventListener('change', showMatrixView);
+      var box = h('div');
+      box.id = 'mx-table';
+      mxOut.appendChild(box);
+      showMatrixView();
+    }
+
+    mxBtn.addEventListener('click', function(){
+      var algo = selectedAlgo();
+      if(!algo){ mxStatus.textContent = 'Vyberte slovník (vytvořte ho na kartě Tokenizace).'; return; }
+      var raw = deltaIn.value.trim();
+      var delta = Number(raw);
+      if(!/^\d+$/.test(raw) || delta < 1 || delta > 1000){
+        mxStatus.textContent = 'Δ musí být celé číslo od 1 do 1000.';
+        return;
+      }
+      mxStatus.textContent = 'Počítám…';
+      mxBtn.disabled = true;
+      mxOut.innerHTML = '';
+      call('POST', '/api/matrix', {algo: algo, delta: delta}, function(st, d){
+        mxStatus.textContent = '';
+        refresh();
+        if(!d){ mxStatus.textContent = 'Spojení s programem se přerušilo. Spusťte program znovu.'; return; }
+        if(d.error){ mxStatus.textContent = d.error; return; }
+        shownAlgo = algo;
+        showMatrix(d, ALGOS.filter(function(a){ return a[0] === algo; })[0][1]);
+      });
+    });
+    refresh();
+  }
 })();
