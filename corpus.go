@@ -48,6 +48,8 @@ type Corpus struct {
 	Words [][]rune
 	Freq  []int
 	Total int // celkový počet řad (s opakováním)
+	// Order je pořadí řad v textu (čísla do Words); vyplní se jen při BuildCorpusOrdered.
+	Order []int32
 }
 
 // isWordRune: znak slova je písmeno nebo číslice.
@@ -63,8 +65,9 @@ func lowerRune(r rune) rune {
 }
 
 type corpusBuilder struct {
-	index map[string]int
-	c     *Corpus
+	index       map[string]int
+	c           *Corpus
+	recordOrder bool
 }
 
 func (b *corpusBuilder) add(seq []rune) {
@@ -73,13 +76,18 @@ func (b *corpusBuilder) add(seq []rune) {
 	}
 	b.c.Total++
 	key := string(seq)
-	if i, ok := b.index[key]; ok {
+	i, ok := b.index[key]
+	if ok {
 		b.c.Freq[i]++
-		return
+	} else {
+		i = len(b.c.Words)
+		b.index[key] = i
+		b.c.Words = append(b.c.Words, append([]rune(nil), seq...))
+		b.c.Freq = append(b.c.Freq, 1)
 	}
-	b.index[key] = len(b.c.Words)
-	b.c.Words = append(b.c.Words, append([]rune(nil), seq...))
-	b.c.Freq = append(b.c.Freq, 1)
+	if b.recordOrder {
+		b.c.Order = append(b.c.Order, int32(i))
+	}
 }
 
 // BuildCorpus přečte text (UTF-8) po řádcích.
@@ -88,7 +96,17 @@ func (b *corpusBuilder) add(seq []rune) {
 //   - SentencePiece: každý neprázdný řádek je jedna řada znaků; řada mezer (i tabulátorů)
 //     se nahradí jedním „_“, na začátku a na konci řádku se mezery zahodí, interpunkce zůstává.
 func BuildCorpus(r io.Reader, alg Algorithm, ignoreCase bool) (*Corpus, error) {
-	b := &corpusBuilder{index: map[string]int{}, c: &Corpus{}}
+	return buildCorpus(r, alg, ignoreCase, false)
+}
+
+// BuildCorpusOrdered je BuildCorpus, který si navíc pamatuje pořadí řad v textu (Corpus.Order);
+// potřebuje ho matice společného výskytu.
+func BuildCorpusOrdered(r io.Reader, alg Algorithm, ignoreCase bool) (*Corpus, error) {
+	return buildCorpus(r, alg, ignoreCase, true)
+}
+
+func buildCorpus(r io.Reader, alg Algorithm, ignoreCase, recordOrder bool) (*Corpus, error) {
+	b := &corpusBuilder{index: map[string]int{}, c: &Corpus{}, recordOrder: recordOrder}
 	br := bufio.NewReaderSize(r, 1<<20)
 	seq := make([]rune, 0, 256)
 	for {
