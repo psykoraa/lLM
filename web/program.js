@@ -3,8 +3,12 @@
 (function(){
   'use strict';
   var TOKEN = window.__LLM_TOKEN__;
+  // Webová stránka bez programu: výpočty dělá WebAssembly ve workeru (web/web-transport.js).
+  var W = window.__LLM_WEB__ || null;
+  var LOST = W ? 'Výpočet se přerušil. Obnovte stránku.' : 'Spojení s programem se přerušilo. Spusťte program znovu.';
 
   function call(method, path, body, cb){
+    if(W){ W.call(method, path, body, cb); return; }
     var x = new XMLHttpRequest();
     x.open(method, path, true);
     x.setRequestHeader('X-Token', TOKEN);
@@ -33,18 +37,20 @@
   // stránka se slovníkem tokenů se otevírá s přístupovým klíčem
   var origOpen = window.open;
   window.open = function(url, name, features){
-    if(typeof url === 'string' && url.indexOf('slovnik-tokenu.html') === 0){
+    if(!W && typeof url === 'string' && url.indexOf('slovnik-tokenu.html') === 0){
       url += (url.indexOf('?') < 0 ? '?' : '&') + 't=' + TOKEN;
     }
     return origOpen.call(window, url, name, features);
   };
 
   // program běží, dokud je stránka otevřená
-  setInterval(function(){ call('GET', '/api/ping', undefined, function(){}); }, 5000);
-  window.addEventListener('pagehide', function(){
-    if(navigator.sendBeacon) navigator.sendBeacon('/api/closing?t=' + TOKEN, '');
-  });
-  call('GET', '/api/ping', undefined, function(){});
+  if(!W){
+    setInterval(function(){ call('GET', '/api/ping', undefined, function(){}); }, 5000);
+    window.addEventListener('pagehide', function(){
+      if(navigator.sendBeacon) navigator.sendBeacon('/api/closing?t=' + TOKEN, '');
+    });
+    call('GET', '/api/ping', undefined, function(){});
+  }
 
   // tlačítko pro ukončení programu
   var wrap = document.querySelector('.wrap');
@@ -60,7 +66,7 @@
     });
   });
   quitRow.appendChild(quit);
-  wrap.appendChild(quitRow);
+  if(!W) wrap.appendChild(quitRow);
 
   // Text (korpus) na kartě Tokenizace: načíst ze souboru nebo vložit; objeví se dole na stránce
   // (u každého algoritmu) a hledá se v něm i tvoří slovník. Původní text o Albertu Einsteinovi
@@ -115,13 +121,17 @@
       if(!f) return;
       if(/\.pdf$/i.test(f.name) || f.type === 'application/pdf'){
         say('Čte se text z PDF…');
+        var done = function(d){
+          if(d && d.text){ area.value = d.text; pasteBox.hidden = true; use(d.text, f.name); }
+          else say((d && d.error) || 'PDF se nepodařilo přečíst.');
+        };
+        if(W){ W.pdf(f, done); fileIn.value = ''; return; }
         var x = new XMLHttpRequest();
         x.open('POST', '/api/pdf', true);
         x.setRequestHeader('X-Token', TOKEN);
         x.onload = function(){
           var d = null; try{ d = JSON.parse(x.responseText); }catch(e){}
-          if(d && d.text){ area.value = d.text; pasteBox.hidden = true; use(d.text, f.name); }
-          else say((d && d.error) || 'PDF se nepodařilo přečíst.');
+          done(d);
         };
         x.onerror = function(){ say('PDF se nepodařilo přečíst.'); };
         x.send(f);
@@ -146,7 +156,7 @@
     });
 
     // soubor přetažený na program
-    call('GET', '/api/initial', undefined, function(st, d){
+    if(!W) call('GET', '/api/initial', undefined, function(st, d){
       if(d && d.text){ area.value = ''; use(d.text, d.name); }
     });
   }
@@ -289,7 +299,7 @@
       var box = mxOut.querySelector('#mx-table');
       call('GET', '/api/matrix/view?k=' + k + '&mode=' + mode, undefined, function(st, d){
         box.innerHTML = '';
-        if(!d || d.error){ box.appendChild(h('p', 'hint', (d && d.error) || 'Spojení s programem se přerušilo. Spusťte program znovu.')); return; }
+        if(!d || d.error){ box.appendChild(h('p', 'hint', (d && d.error) || LOST)); return; }
         var wrapT = h('div', 'vocab-scroll');
         var table = h('table', 'theory-table');
         var thead = h('thead');
@@ -347,6 +357,7 @@
       var dl = h('button', 'btn primary', 'Stáhnout celou matici (.tsv)');
       dl.type = 'button';
       dl.addEventListener('click', function(){
+        if(W){ W.download(function(err){ if(err) mxStatus.textContent = err; }); return; }
         var a = document.createElement('a');
         a.href = '/api/matrix/download?t=' + encodeURIComponent(TOKEN);
         a.setAttribute('download', '');
@@ -411,7 +422,7 @@
       call('POST', '/api/matrix', {algo: algo, delta: delta}, function(st, d){
         mxStatus.textContent = '';
         refresh();
-        if(!d){ mxStatus.textContent = 'Spojení s programem se přerušilo. Spusťte program znovu.'; return; }
+        if(!d){ mxStatus.textContent = LOST; return; }
         if(d.error){ mxStatus.textContent = d.error; return; }
         shownAlgo = algo;
         showMatrix(d, ALGOS.filter(function(a){ return a[0] === algo; })[0][1]);

@@ -68,6 +68,18 @@ llm-windows-amd64.exe console            (otázky v černém okně místo prohl�
 > zvolte „Další informace → Přesto spustit“. Na macOS a Linuxu je potřeba soubor nejdřív
 > povolit ke spuštění: `chmod +x bin/llm-macos-apple-silicon`.
 
+## Webová stránka (bez instalace programu)
+
+Totéž, co program, umí i **samostatná webová stránka** ve složce [`docs/`](docs/). Výpočty (slovníky BPE,
+WordPiece a SentencePiece, matice společného výskytu, čtení textu z PDF) dělá stejný kód v Go, přeložený do
+WebAssembly a spuštěný přímo v prohlížeči – nic se neinstaluje, žádný server nic nepočítá a text z počítače
+neodchází. Výsledky jsou stejné jako u programu.
+
+- **Na GitHub Pages:** v nastavení repozitáře zvolte *Pages → Deploy from a branch → složka `/docs`*.
+- **Lokálně:** `cd docs && python3 -m http.server` a otevřít `http://localhost:8000`
+  (z `file://` to nejde, prohlížeč nepustí WebAssembly).
+- **Po změně zdrojů:** `./build-web.sh` (potřebuje Go) znovu vytvoří složku `docs/`.
+
 ## Použití z příkazového řádku
 
 ```
@@ -177,6 +189,7 @@ Potřebujete [Go](https://go.dev/dl/) 1.24 nebo novější.
 go test ./...        # testy
 go build -o llm .    # sestavení pro tento počítač
 ./build.sh           # programy pro Windows, macOS a Linux do složky bin/
+./build-web.sh       # webová stránka (WebAssembly) do složky docs/
 ```
 
 ## Webová stránka v programu
